@@ -16,6 +16,9 @@ node_modules/
 .env
 .env.local
 
+# Python virtualenv for AWS Syndicate (see README)
+syndicate_venv/
+
 # Terraform
 **/.terraform/
 *.tfstate
