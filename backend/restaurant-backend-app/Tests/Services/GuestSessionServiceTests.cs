@@ -19,7 +19,7 @@ using System.Text;
 
 namespace APIHandler.Tests.Services;
 
-public class GuestSessionServiceTests
+public partial class GuestSessionServiceTests
 {
     private readonly Mock<IGuestSessionRepository> _mockGuestSessionRepository = new();
     private readonly Mock<IGroupReservationRepository> _mockGroupReservationRepository = new();
