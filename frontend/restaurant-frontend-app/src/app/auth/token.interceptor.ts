@@ -20,7 +20,8 @@ export const tokenInterceptor: HttpInterceptorFn = (
   // IMPORTANT: do not modify Guest endpoints at all.
   // Guest flow uses a different token (guest session token) and we must not touch the body.
   // Otherwise we break POST /guest/sessions payload.
-  if (req.url.includes('/guest/')) {
+  // /guest/groups/* is the exception: the Owner calls it with the regular sign-in token.
+  if (req.url.includes('/guest/') && !req.url.includes('/guest/groups/')) {
     return next(req).pipe(
       catchError((error: HttpErrorResponse) => {
         console.log(error);

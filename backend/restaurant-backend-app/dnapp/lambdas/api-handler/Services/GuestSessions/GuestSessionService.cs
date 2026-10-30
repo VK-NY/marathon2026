@@ -11,6 +11,7 @@ using APIHandler.Repositories.Auth;
 using APIHandler.Repositories.Dishes;
 using APIHandler.Repositories.GroupReservations;
 using APIHandler.Repositories.GuestSessions;
+using APIHandler.Repositories.Orders;
 using APIHandler.Repositories.Reservations;
 using APIHandler.Repositories.Tables;
 using System;
@@ -29,7 +30,8 @@ public class GuestSessionService(
     IDishRepository dishRepository,
     IReservationRepository reservationRepository,
     IUserRepository userRepository,
-    ITableRepository tableRepository) : IGuestSessionService
+    ITableRepository tableRepository,
+    IOrderRepository orderRepository) : IGuestSessionService
 {
     public async Task<bool> IsAuthorizedAsync(string guestSessionToken, string guestSessionId)
     {
@@ -229,9 +231,14 @@ public class GuestSessionService(
     private async Task<GetAllSessionsResponse> BuildGroupSnapshotAsync(string groupReservationId, Reservation reservation)
     {
         var sessions = await guestSessionRepository.GetAllByGroupReservationIdAsync(groupReservationId);
+        var group = await groupReservationRepository.GetGroupReservationByIdAsync(groupReservationId);
+        Order? order = await orderRepository.GetOrderByReservationIdAsync(reservation.Id);
+
+        var ownerDishes = GetOwnerOrderDishes(order, sessions, group);
 
         var dishIds = sessions
             .SelectMany(s => s.Dishes)
+            .Concat(ownerDishes)
             .Select(s => s.DishId)
             .Distinct()
             .ToArray();
@@ -244,7 +251,9 @@ public class GuestSessionService(
         // Owner goes first, guests follow in the order they are stored.
         foreach (var guestSession in sessions.OrderByDescending(s => s.IsOwnerSession))
         {
-            var items = guestSession.Dishes
+            var dishes = guestSession.IsOwnerSession ? guestSession.Dishes.Concat(ownerDishes) : guestSession.Dishes;
+
+            var items = dishes
                 .Where(d => dishesById.ContainsKey(d.DishId))
                 .Select(d => new OrderItemResponse
                 {
@@ -254,14 +263,47 @@ public class GuestSessionService(
 
             decimal total = items.Sum(i => i.Quantity * i.Dish.Price);
 
+            // The owner confirms a pre-order through the order itself, not through the session.
+            bool ownerConfirmed = order?.Status == OrderStatus.SubmittedByCustomer && ownerDishes.Count > 0;
+
             var participant = guestSession.IsOwnerSession
-                ? new Participant(guestSession.Id, ParticipantType.Owner, await GetOwnerNameAsync(reservation, guestSession), items, total, guestSession.IsSubmitted)
+                ? new Participant(guestSession.Id, ParticipantType.Owner, await GetOwnerNameAsync(reservation, guestSession), items, total, guestSession.IsSubmitted || ownerConfirmed)
                 : new Participant(guestSession.Id, ParticipantType.Guest, guestSession.GuestName, items, total, guestSession.IsSubmitted);
 
             participants.Add(participant);
         }
 
         return new GetAllSessionsResponse(participants, participants.Sum(p => p.Total));
+    }
+
+    /// <summary>
+    /// The owner's own dishes live in the order. Once the group is submitted the order also holds
+    /// the guests' dishes, so those are taken out to avoid counting them twice.
+    /// </summary>
+    private static List<OrderItem> GetOwnerOrderDishes(Order? order, List<GuestSession> sessions, GroupReservation? group)
+    {
+        if (order?.Dishes is null)
+            return [];
+
+        var guestQuantities = new Dictionary<string, int>();
+
+        if (group?.Status == GroupReservationStatus.Submitted)
+        {
+            foreach (var dish in sessions.Where(s => s.IsSubmitted).SelectMany(s => s.Dishes))
+            {
+                guestQuantities[dish.DishId] = guestQuantities.GetValueOrDefault(dish.DishId) + dish.Quantity;
+            }
+        }
+
+        return order.Dishes
+            .Select(d => new OrderItem
+            {
+                DishId = d.DishId,
+                Quantity = d.Quantity - guestQuantities.GetValueOrDefault(d.DishId),
+                State = d.State
+            })
+            .Where(d => d.Quantity > 0)
+            .ToList();
     }
 
     private async Task<string> GetOwnerNameAsync(Reservation reservation, GuestSession ownerSession)

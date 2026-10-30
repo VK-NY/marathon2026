@@ -90,11 +90,15 @@ export class GroupOrderPageComponent {
       .pipe(
         switchMap((invite) => {
           const groupId = invite.GroupReservationId;
-          return forkJoin({
-            sessions: this.groupOrders.getSessions$(groupId),
-            ownerSessionId: this.groupOrders.getOwnerSessionId$(this.reservationId),
-            status: this.groupOrders.getStatus$(groupId),
-          }).pipe(map((data) => ({ invite, ...data })));
+          // the backend creates the owner session on this call, so it must finish before the list is read
+          return this.groupOrders.getOwnerSessionId$(this.reservationId).pipe(
+            switchMap((ownerSessionId) =>
+              forkJoin({
+                sessions: this.groupOrders.getSessions$(groupId),
+                status: this.groupOrders.getStatus$(groupId),
+              }).pipe(map((data) => ({ invite, ownerSessionId, ...data }))),
+            ),
+          );
         }),
         takeUntilDestroyed(this.destroyRef),
       )

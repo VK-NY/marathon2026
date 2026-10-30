@@ -117,6 +117,81 @@ public partial class GuestSessionServiceTests
         Assert.Equal(400, result.Total);
     }
 
+    private static Order OwnerOrder(OrderStatus status, params (string dishId, int quantity)[] dishes) => new()
+    {
+        OrderId = "order-1",
+        CustomerId = OwnerId,
+        ReservationId = ReservationId,
+        ReservationAddress = "Rustaveli Avenue 48",
+        ReservationTime = "Nov 1, 2026",
+        Status = status,
+        Dishes = dishes.Select(d => new OrderItem { DishId = d.dishId, Quantity = d.quantity, State = OrderItemState.Pending }).ToList()
+    };
+
+    private static GuestSession EmptyOwnerSession()
+    {
+        var ownerSession = Session("owner-session", "Owner", false);
+        ownerSession.IsOwnerSession = true;
+        return ownerSession;
+    }
+
+    [Fact]
+    public async Task GetGroupSessionsAsync_OwnerHasSubmittedOrder_ShowsOrderDishesAsSubmitted()
+    {
+        SetupOwnedGroup();
+        SetupDishes();
+        _mockGuestSessionRepository
+            .Setup(r => r.GetAllByGroupReservationIdAsync(GroupId))
+            .ReturnsAsync([Session("session1", "Andrii", true, ("dish1", 2)), EmptyOwnerSession()]);
+        _mockOrderRepository
+            .Setup(r => r.GetOrderByReservationIdAsync(ReservationId))
+            .ReturnsAsync(OwnerOrder(OrderStatus.SubmittedByCustomer, ("dish2", 1)));
+
+        var result = await _guestSessionService.GetGroupSessionsAsync(OwnerId, GroupId);
+
+        var owner = result.Participants.First();
+        Assert.Equal(ParticipantType.Owner, owner.Type);
+        Assert.Equal("Tom Yum", owner.Items.Single().Dish.Name);
+        Assert.Equal(220, owner.Total);
+        Assert.True(owner.IsSubmitted);
+        Assert.Equal(580, result.Total);
+    }
+
+    [Fact]
+    public async Task GetGroupSessionsAsync_GroupSubmitted_DoesNotCountGuestDishesTwice()
+    {
+        SetupOwnedGroup(GroupReservationStatus.Submitted);
+        SetupDishes();
+        _mockGuestSessionRepository
+            .Setup(r => r.GetAllByGroupReservationIdAsync(GroupId))
+            .ReturnsAsync([Session("session1", "Andrii", true, ("dish1", 2)), EmptyOwnerSession()]);
+        // the order already holds the owner's dish2 plus the guest's dish1 merged on submit
+        _mockOrderRepository
+            .Setup(r => r.GetOrderByReservationIdAsync(ReservationId))
+            .ReturnsAsync(OwnerOrder(OrderStatus.SubmittedByCustomer, ("dish2", 1), ("dish1", 2)));
+
+        var result = await _guestSessionService.GetGroupSessionsAsync(OwnerId, GroupId);
+
+        Assert.Equal("Tom Yum", result.Participants.First().Items.Single().Dish.Name);
+        Assert.Equal(580, result.Total);
+    }
+
+    [Fact]
+    public async Task GetGroupSessionsAsync_NoOrder_OwnerStaysEmptyAndNotSubmitted()
+    {
+        SetupOwnedGroup();
+        SetupDishes();
+        _mockGuestSessionRepository
+            .Setup(r => r.GetAllByGroupReservationIdAsync(GroupId))
+            .ReturnsAsync([EmptyOwnerSession()]);
+
+        var result = await _guestSessionService.GetGroupSessionsAsync(OwnerId, GroupId);
+
+        var owner = result.Participants.Single();
+        Assert.Empty(owner.Items);
+        Assert.False(owner.IsSubmitted);
+    }
+
     [Fact]
     public async Task GetGroupSessionsAsync_NotOwner_ThrowsActionForbidden()
     {
