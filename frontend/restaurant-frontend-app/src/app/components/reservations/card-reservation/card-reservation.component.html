@@ -162,6 +162,14 @@
             </button>
           }
         } @else if (role() === Roles.CUSTOMER) {
+          @if (r().guestCount > 1) {
+            <a
+              class="button button--secondary button--large"
+              [routerLink]="['/reservations', r().id, 'group-order']"
+            >
+              Group Pre-Order
+            </a>
+          }
           <button
             type="button"
             class="button button--primary button--large"
