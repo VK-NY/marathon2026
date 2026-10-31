@@ -1,5 +1,7 @@
 # Deployment Guide
 
+**Test Automation homework:** see [aqa/restaurant-aqa-framework/README.md](aqa/restaurant-aqa-framework/README.md).
+
 This repo uses three deployment tracks:
 
 - Terraform for shared AWS infrastructure under `infra/terraform`
