@@ -11,23 +11,30 @@ const escapeXml = (value) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const STYLE = { body: 0, header: 1, title: 2 };
+// Style 0 is the plain default: Excel ignores wrapping set on it.
+const STYLE = { note: 0, body: 1, header: 2, title: 3 };
 
 function column(index) {
   return String.fromCharCode(65 + index);
 }
 
+// No merged cells and no fixed heights: Excel and Google Sheets fit the rows to the wrapped text themselves.
 function sheetXml(rows, widths) {
   const cols = widths
     .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
     .join('');
   const body = rows
     .map((row, rowIndex) => {
-      const cells = row.cells
-        .map((value, cellIndex) => {
-          if (value === null || value === undefined || value === '') return '';
+      if (row.cells.length === 0) return `<row r="${rowIndex + 1}"/>`;
+      const style = row.style ?? STYLE.body;
+      const count = style === STYLE.title || style === STYLE.note ? 1 : widths.length;
+      const cells = widths
+        .slice(0, count)
+        .map((_, cellIndex) => {
+          const value = row.cells[cellIndex];
           const ref = `${column(cellIndex)}${rowIndex + 1}`;
-          return `<c r="${ref}" s="${row.style ?? STYLE.body}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+          if (value === null || value === undefined || value === '') return `<c r="${ref}" s="${style}"/>`;
+          return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
         })
         .join('');
       return `<row r="${rowIndex + 1}">${cells}</row>`;
@@ -42,7 +49,7 @@ function sheetXml(rows, widths) {
 
 const requirementRows = [
   { style: STYLE.title, cells: ['Requirements analysis: US11 Guest Viewing Reservation Menu'] },
-  { cells: ['Sources: User Story PDF, reference screenshot and a live session on a test deployment. Figma was not reviewed (see note at the end).'] },
+  { style: STYLE.note, cells: ['Sources: User Story PDF, Figma (Guest Flow), reference screenshot and a live session on a test deployment.'] },
   { style: STYLE.header, cells: ['ID', 'Where', 'Shortcoming', 'Why it matters', 'Suggested fix'] },
   ...requirements.map((item) => ({ cells: [item.id, item.where, item.issue, item.impact, item.fix] })),
 ];
@@ -66,7 +73,7 @@ const defectRows = [{ style: STYLE.title, cells: ['Defect reports: US11 Guest Vi
 for (const item of defects) {
   defectRows.push({
     style: STYLE.header,
-    cells: [`ID: ${item.id}`, `Summary: ${item.summary}`, '', `Env: ${item.env}\nPriority: ${item.priority}\nSeverity: ${item.severity}`],
+    cells: [`ID: ${item.id}`, `Summary: ${item.summary}`, `Env: ${item.env}\nPriority: ${item.priority}\nSeverity: ${item.severity}`],
   });
   defectRows.push({ cells: ['', `Pre-conditions:\n${item.pre}`] });
   defectRows.push({
@@ -83,7 +90,7 @@ for (const item of defects) {
 const sheets = [
   { name: 'Requirements analysis', xml: sheetXml(requirementRows, [8, 22, 60, 50, 50]) },
   { name: 'Test cases', xml: sheetXml(testCaseRows, [10, 70, 70, 34]) },
-  { name: 'Defect reports', xml: sheetXml(defectRows, [10, 90, 8, 34]) },
+  { name: 'Defect reports', xml: sheetXml(defectRows, [10, 110, 44]) },
 ];
 
 const files = {
@@ -130,11 +137,14 @@ const files = {
     '<font><b/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="14"/><name val="Arial"/></font></fonts>' +
     '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
     '<fill><patternFill patternType="solid"><fgColor rgb="FFD9E5D9"/></patternFill></fill></fills>' +
-    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+    '<border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right>' +
+    '<top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="3">' +
-    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
-    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+    '<cellXfs count="4">' +
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
     '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
     '</cellXfs></styleSheet>',
 };
