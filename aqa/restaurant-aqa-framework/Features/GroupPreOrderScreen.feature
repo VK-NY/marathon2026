@@ -4,13 +4,12 @@ Feature: Group pre-order screen
   The owner follows the group on one screen, removes a guest if needed and sends the
   consolidated pre-order to the restaurant, where the waiter picks it up.
 
-  @level1
   Rule: The owner sees what everybody chose
 
     Background:
       Given a customer has booked a table for a group
 
-    @smoke
+    @level1 @smoke
     Scenario: Participants, dishes and totals are shown
       Given "Anna" has joined the group
       And "Anna" has added 2 "QA Salad" to their cart
@@ -27,6 +26,7 @@ Feature: Group pre-order screen
       And the owner is warned that 2 participants have not confirmed
       And the grand total shown is "$25.00"
 
+    @level1
     Scenario: A guest's change reaches the owner's screen
       Given "Ben" has joined the group
       And "Ben" has added 1 "QA Soup" to their cart
@@ -38,27 +38,29 @@ Feature: Group pre-order screen
         | QA Soup × 1 $8.00   |
         | QA Pasta × 1 $15.00 |
 
+    @level1
     Scenario: A guest without dishes
       Given "Ben" has joined the group
       When the owner opens the group's screen
       Then "Guest: Ben" is shown as "Still choosing" without dishes
 
+    @level1
     Scenario: Nobody has chosen anything yet
       When the owner opens the group's screen
       Then the owner is told nobody has added dishes yet
       And the owner cannot send the pre-order
 
-    @negative
+    @level1 @negative
     Scenario: A reservation that does not exist
       When the owner opens the screen of a reservation that does not exist
       Then the owner is told the group could not be found
 
-  @level2 @sequential
   Rule: The waiter gets what the owner sends
 
     Background:
       Given a customer has booked a table for a group that a waiter serves
 
+    @level2 @sequential
     Scenario: The pre-order goes to the restaurant and the waiter sees it
       Given "Anna" has joined the group
       And "Anna" has added 2 "QA Salad" to their cart
@@ -82,7 +84,7 @@ Feature: Group pre-order screen
         | QA Salad × 3 |
         | QA Soup × 1  |
 
-    @level3
+    @level2 @sequential @level3
     Scenario: From the guests' carts to the waiter, without the removed guest
       Given "Anna" has joined the group
       And "Anna" has added 1 "QA Salad" to their cart
@@ -101,25 +103,24 @@ Feature: Group pre-order screen
         | QA Salad × 1 |
         | QA Soup × 1  |
 
-  @level2
   Rule: The owner can only send confirmed carts
 
     Background:
       Given a customer has booked a table for a group
 
-    @negative
+    @level2 @negative
     Scenario: Nothing to send until a cart is confirmed
       Given "Ben" has joined the group
       And "Ben" has added 1 "QA Soup" to their cart
       When the owner opens the group's screen
       Then the owner cannot send the pre-order
 
-  @level3
   Rule: The owner can remove a guest
 
     Background:
       Given a customer has booked a table for a group
 
+    @level3
     Scenario: The remaining guests and the total are updated
       Given "Anna" has joined the group
       And "Anna" has added 1 "QA Pasta" to their cart
