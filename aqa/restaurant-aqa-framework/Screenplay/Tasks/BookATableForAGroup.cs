@@ -9,8 +9,8 @@ using Restaurant_Aqa_Framework.Configuration;
 namespace Restaurant_Aqa_Framework.Screenplay.Tasks;
 
 /// <summary>A new customer books a table of their own for a group, in one of the test locations. The table is
-/// deliberately not deleted afterwards: the waiter's reservation list fails for a
-/// reservation whose table is gone (see README), so cleanup cancels the reservation and leaves the table.</summary>
+/// deliberately not deleted afterwards: the waiter's reservation list fails for a reservation whose table is gone
+/// (see README), so cleanup cancels the reservation and leaves the table.</summary>
 public sealed class BookATableForAGroup(string? name = null, int guests = 6, bool servedByANewWaiter = false) : ITask
 {
     private const int MaxGroupSize = 6;
@@ -18,7 +18,7 @@ public sealed class BookATableForAGroup(string? name = null, int guests = 6, boo
     public async Task PerformAsAsync(Actor actor)
     {
         var client = actor.UsingTheApi();
-        var visitor = SampleDataFactory.RegisterRequest() with { FirstName = UniqueFirstName() };
+        var visitor = SampleDataFactory.RegisterRequest();
         var token = await RegisterAndSignInAsync(new AuthApi(client), visitor);
 
         var locationId = Settings.Current.RequireLocation(servedByANewWaiter);
@@ -41,7 +41,7 @@ public sealed class BookATableForAGroup(string? name = null, int guests = 6, boo
         var invite = await (await groups.GetInviteTokenAsync(reservation.Id, token)).ReadAsAsync<InviteTokenResponse>();
         var group = await (await groups.GetInviteAsync(invite.Token)).ReadAsAsync<GroupInviteResponse>();
 
-        var booking = new GroupBooking(reservation.Id, group.GroupReservationId, locationId, visitor.FirstName, visitor.Email, visitor.Password, token);
+        var booking = new GroupBooking(reservation.Id, group.GroupReservationId, locationId, visitor.Email, visitor.Password, token);
         if (name is null)
         {
             actor.Remember(booking);
@@ -88,8 +88,4 @@ public sealed class BookATableForAGroup(string? name = null, int guests = 6, boo
         var signedIn = await auth.SignInAsync(new SignInRequest(visitor.Email, visitor.Password));
         return (await signedIn.ReadAsAsync<SignInResponse>()).IdToken;
     }
-
-    // The waiter's list shows who booked, so a unique name finds this reservation among the others.
-    private static string UniqueFirstName() =>
-        "Owner-" + string.Concat(Guid.NewGuid().ToString("N")[..10].Select(c => (char)(char.IsDigit(c) ? c - '0' + 'g' : c)));
 }

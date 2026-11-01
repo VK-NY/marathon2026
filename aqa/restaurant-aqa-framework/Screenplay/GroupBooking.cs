@@ -5,7 +5,6 @@ public sealed record GroupBooking(
     string ReservationId,
     string GroupId,
     string LocationId,
-    string OwnerFirstName,
     string OwnerEmail,
     string OwnerPassword,
     string OwnerToken);

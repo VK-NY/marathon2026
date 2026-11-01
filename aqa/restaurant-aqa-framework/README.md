@@ -45,7 +45,7 @@ Scenarios create their own customer, table, reservation and guests, with unique 
 - In both: dishes "QA Salad" ($12.50), "QA Soup" ($8.00), "QA Pasta" ($15.00). They are not removed, as deleting a dish other reservations refer to would break those.
 - `WAITER_USERNAME`, `WAITER_PASSWORD`: the standing waiter, also used by the framework's own scenarios.
 
-**Cleanup.** Reservations are cancelled after each scenario. Tables are left in place on purpose (see below), and the backend has no route to delete a customer or a guest session, so those stay too, recognisable by the `AQA-Sample-`/`Owner-` names.
+**Cleanup.** Reservations are cancelled after each scenario, except in the 2 scenarios that end at the waiter: a cancelled reservation could send the next booking to an old waiter, so these keep theirs. Tables stay on purpose (see below). The backend has no route to delete a customer, a waiter or a guest session, so those stay too. Customers and waiters are recognisable by the `AQA-Sample-` first name and the `aqa.sample.` email; everything else is unique per run.
 
 ### Defects found
 

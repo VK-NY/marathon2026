@@ -44,13 +44,6 @@ public sealed class GroupPreOrdersApi(IAPIRequestContext api) : ApiClientBase(ap
             Headers = Headers(sessionToken),
         });
 
-    public Task<IAPIResponse> RemoveDishAsync(string sessionId, CartDishRequest dish, string sessionToken) =>
-        DeleteAsync(Url($"/guest/sessions/{sessionId}/dishes"), new APIRequestContextOptions
-        {
-            DataString = Serialize(dish),
-            Headers = Headers(sessionToken),
-        });
-
     public Task<IAPIResponse> SubmitCartAsync(string sessionId, string sessionToken) =>
         Api.PostAsync(Url($"/guest/sessions/{sessionId}/submit"), new APIRequestContextOptions
         {
