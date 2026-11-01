@@ -34,7 +34,7 @@ public sealed class GroupOrderScreenStepDefinitions(Actor actor) : StepDefinitio
     [Then("{string} is shown as {string} with subtotal {string} and dishes")]
     public async Task ThenShown(string title, string status, string subtotal, DataTable dishes)
     {
-        var participant = await Actor.AsksForAsync(new TheParticipantShown(title));
+        var participant = await Actor.AsksForAsync(new TheParticipantShown(title, subtotal));
 
         await Assert.That(participant.Status).IsEqualTo(status);
         await Assert.That(participant.Subtotal).IsEqualTo(subtotal);

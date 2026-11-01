@@ -1,18 +1,38 @@
 using Microsoft.Playwright;
+using Restaurant_Aqa_Framework.Configuration;
 using Restaurant_Aqa_Framework.Ui;
 using Restaurant_Aqa_Framework.Ui.Components;
 
 namespace Restaurant_Aqa_Framework.Screenplay.Questions;
 
+/// <summary>Gives the page the usual time to show a text. Not finding it is no error here: the step that asked reports
+/// the difference, with the value that is on the page.</summary>
+internal static class ExpectedText
+{
+    public static async Task WaitForAsync(ILocator locator, string text)
+    {
+        try
+        {
+            await Assertions.Expect(locator).ToHaveTextAsync(text, new() { Timeout = Settings.Current.DefaultTimeoutMs });
+        }
+        catch (PlaywrightException)
+        {
+        }
+    }
+}
+
 /// <summary>What the screen shows for one participant. "dish × 2 $25.00" lines are read as plain text.</summary>
 public sealed record ParticipantShown(string Status, IReadOnlyList<string> Dishes, string Subtotal, bool CanBeRemoved);
 
-public sealed class TheParticipantShown(string title) : IQuestion<ParticipantShown>
+/// <summary>A subtotal, when given, is waited for: after a refresh the old values stay until the server has answered.</summary>
+public sealed class TheParticipantShown(string title, string? expectedSubtotal = null) : IQuestion<ParticipantShown>
 {
     public async Task<ParticipantShown> AnsweredByAsync(Actor actor)
     {
         var card = new GroupOrderPage(actor.LookingAtThePage()).Card(title);
         await card.Status.WaitForAsync();
+        if (expectedSubtotal is not null)
+            await ExpectedText.WaitForAsync(card.Subtotal, expectedSubtotal);
 
         var lines = await card.Items.AllInnerTextsAsync();
         return new ParticipantShown(
@@ -48,16 +68,7 @@ public sealed class TheGrandTotalShown(string? expected = null) : IQuestion<stri
     {
         var total = new GroupOrderPage(actor.LookingAtThePage()).GrandTotal;
         if (expected is not null)
-        {
-            try
-            {
-                await Assertions.Expect(total).ToHaveTextAsync(expected);
-            }
-            catch (PlaywrightException)
-            {
-                // The caller reports the difference, with the value that is on the page.
-            }
-        }
+            await ExpectedText.WaitForAsync(total, expected);
 
         return await total.InnerTextAsync();
     }
@@ -69,15 +80,7 @@ public sealed class TheStatusBadgeShown(string expected) : IQuestion<string>
     public async Task<string> AnsweredByAsync(Actor actor)
     {
         var badge = new GroupOrderPage(actor.LookingAtThePage()).StatusBadge;
-        try
-        {
-            await Assertions.Expect(badge).ToHaveTextAsync(expected);
-        }
-        catch (PlaywrightException)
-        {
-            // The caller reports the difference, with the value that is on the page.
-        }
-
+        await ExpectedText.WaitForAsync(badge, expected);
         return await badge.InnerTextAsync();
     }
 }
