@@ -1,0 +1,116 @@
+name: AQA Report Portal
+
+# Starts ReportPortal inside the job, sends the group pre-order scenarios to it, and keeps the evidence (launch data
+# and a screenshot) as an artifact. ReportPortal lives only as long as the job, so nothing runs or costs money in between.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REPORTPORTAL_VERSION: "26.0.7"
+  RP_URL: http://localhost:8080
+  RP_PROJECT: superadmin_personal
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start ReportPortal
+        run: |
+          password="Rp1-$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "RP_ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+          curl -fsSL "https://raw.githubusercontent.com/reportportal/reportportal/${REPORTPORTAL_VERSION}/docker-compose.yml" -o rp-compose.yml
+          RP_INITIAL_ADMIN_PASSWORD="$password" docker compose -p reportportal -f rp-compose.yml --profile core --profile infra up -d
+
+      - name: Wait for ReportPortal
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fs "$RP_URL/api/health" > /dev/null && curl -fs "$RP_URL/uat/health" > /dev/null; then
+              echo "ReportPortal is up after $attempt checks"
+              exit 0
+            fi
+            sleep 10
+          done
+          docker compose -p reportportal -f rp-compose.yml ps
+          docker compose -p reportportal -f rp-compose.yml logs --tail=40 api uat
+          exit 1
+
+      - name: Create an API key
+        run: |
+          token=$(curl -fsS -u ui:uiman "$RP_URL/uat/sso/oauth/token" \
+            -d grant_type=password -d username=superadmin --data-urlencode "password=$RP_ADMIN_PASSWORD" | jq -r .access_token)
+          echo "::add-mask::$token"
+          user_id=$(curl -fsS -H "Authorization: Bearer $token" "$RP_URL/api/users" | jq -r .id)
+          key=$(curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            -d '{"name":"ci"}' "$RP_URL/api/users/$user_id/api-keys" | jq -r .api_key)
+          echo "::add-mask::$key"
+          echo "RP_API_KEY=$key" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        working-directory: aqa/restaurant-aqa-framework
+        run: dotnet build --configuration Release
+
+      # A failed test must not stop the pipeline: the evidence below is what shows it.
+      - name: Run tests
+        id: run_tests
+        continue-on-error: true
+        working-directory: aqa/restaurant-aqa-framework
+        env:
+          HEADLESS: "true"
+          DEFAULT_TIMEOUT_MS: "45000"
+          MAX_PARALLEL_TESTS: "2"
+          UI_URL: ${{ vars.AQA_UI_URL }}
+          API_URL: ${{ vars.AQA_API_URL }}
+          TEST_LOCATION_ID: ${{ vars.AQA_TEST_LOCATION_ID }}
+          WAITER_LOCATION_ID: ${{ vars.AQA_WAITER_LOCATION_ID }}
+          WAITER_USERNAME: ${{ secrets.AQA_WAITER_USERNAME }}
+          WAITER_PASSWORD: ${{ secrets.AQA_WAITER_PASSWORD }}
+          ReportPortal__Enabled: "true"
+          ReportPortal__Server__Url: ${{ env.RP_URL }}
+          ReportPortal__Server__Project: ${{ env.RP_PROJECT }}
+          ReportPortal__Server__Authentication__Uuid: ${{ env.RP_API_KEY }}
+        run: |
+          dotnet bin/Release/net10.0/restaurant-aqa-framework.dll --report-trx --results-directory TestResults \
+            --treenode-filter "/*/*/*/*[Category=group-preorder]"
+
+      - name: Export the launch
+        if: always()
+        run: |
+          mkdir -p report-portal
+          curl -fsS -H "Authorization: Bearer $RP_API_KEY" \
+            "$RP_URL/api/v1/$RP_PROJECT/launch?page.sort=startTime,desc" -o report-portal/launches.json
+          jq -r '"## ReportPortal launch\n\n| Launch | Status | Total | Passed | Failed | Skipped |\n|---|---|---:|---:|---:|---:|",
+            (.content[] | "| \(.name) #\(.number) | \(.status) | \(.statistics.executions.total // 0) | \(.statistics.executions.passed // 0) | \(.statistics.executions.failed // 0) | \(.statistics.executions.skipped // 0) |")' \
+            report-portal/launches.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Take a screenshot of the launch
+        if: always()
+        continue-on-error: true
+        working-directory: aqa/restaurant-aqa-framework
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node scripts/report-portal-screenshot.cjs ../../report-portal/launches.png
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-portal
+          path: report-portal/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Stop ReportPortal
+        if: always()
+        run: docker compose -p reportportal -f rp-compose.yml down -v

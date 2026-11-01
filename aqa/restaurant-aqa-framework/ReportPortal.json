@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/reportportal/agent-dotnet-reqnroll/master/src/ReportPortal.ReqnrollPlugin/ReportPortal.config.schema",
+  "enabled": false,
+  "analytics": {
+    "enabled": false
+  },
+  "launch": {
+    "name": "Group pre-order",
+    "attributes": [ "homework:test-automation" ]
+  }
+}

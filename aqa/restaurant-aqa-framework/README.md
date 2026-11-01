@@ -59,7 +59,11 @@ Scenarios create their own customer, table, reservation and guests, with unique 
 
 The backend runs on a 128 MB Lambda, so a cold start can pass the default 15 s. CI therefore sets `DEFAULT_TIMEOUT_MS=45000` and `MAX_PARALLEL_TESTS=2`; use the same in `.env`.
 
-The 6 failures of a complete run are the framework's own `@known-defect` scenarios, not part of this solution. Report Portal (the starred task) is not done.
+The 6 failures of a complete run are the framework's own `@known-defect` scenarios, not part of this solution.
+
+### Report Portal (starred task)
+
+Actions, **AQA Report Portal**, Run workflow. The job starts ReportPortal in containers on the GitHub runner, sends the group pre-order scenarios to it through the `ReportPortal.Reqnroll` agent, and keeps the launch data and a screenshot in the `report-portal` artifact. ReportPortal exists only during the job, so nothing runs or costs money in between, and its password is generated per run. Everywhere else the agent is off (`ReportPortal.json`).
 
 ## About the framework
 
