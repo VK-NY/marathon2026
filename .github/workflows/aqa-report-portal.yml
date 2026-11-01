@@ -105,20 +105,16 @@ jobs:
             (.content[] | "| \(.name) #\(.number) | \(.status) | \(.statistics.executions.total // 0) | \(.statistics.executions.passed // 0) | \(.statistics.executions.failed // 0) | \(.statistics.executions.skipped // 0) |")' \
             report-portal/launches.json >> "$GITHUB_STEP_SUMMARY"
 
-          # A launch can be FAILED with every scenario passed: this names what failed.
+          # A launch can be FAILED with every scenario passed: this counts its items by type and status.
           launch_id=$(jq -r '.content[0].id' report-portal/launches.json)
-          curl -fsS -H "Authorization: Bearer $RP_API_KEY" \
-            "$RP_URL/api/v1/$RP_PROJECT/item?filter.eq.launchId=$launch_id&filter.eq.status=FAILED&isLatest=false&launchesLimit=0&page.size=20" \
-            -o report-portal/failed-items.json
-          jq -r '"::notice::failed items: \(.page.totalElements)", (.content[] | "::notice::\(.type) hasChildren=\(.hasChildren) \(.name)")' \
-            report-portal/failed-items.json
-          for item in $(jq -r '.content[:3][].id' report-portal/failed-items.json); do
+          for has_stats in true false; do
             curl -fsS -H "Authorization: Bearer $RP_API_KEY" \
-              "$RP_URL/api/v1/$RP_PROJECT/log?filter.eq.item=$item&page.size=5" \
-              | jq -r '.content[] | "::notice::log \(.level) \(.message[:150] | gsub("\n"; " "))"'
+              "$RP_URL/api/v1/$RP_PROJECT/item?filter.eq.launchId=$launch_id&filter.eq.hasStats=$has_stats&isLatest=false&launchesLimit=0&page.size=300" \
+              -o "report-portal/items-$has_stats.json"
+            jq -r --arg stats "$has_stats" '.content | group_by([.type, .status])[]
+              | "::notice::hasStats=\($stats) \(.[0].type) \(.[0].status): \(length) e.g. \(.[0].name[:70])"' "report-portal/items-$has_stats.json"
           done
-          find aqa/restaurant-aqa-framework -name 'ReportPortal*.log' -exec grep -hiE 'error|exception' {} + \
-            | head -5 | cut -c1-200 | sed 's/^/::notice::agent /' || true
+          jq -r '.content[0] | "::notice::launch status=\(.status) defects=\(.statistics.defects | tojson)"' report-portal/launches.json
 
       - name: Take a screenshot of the launch
         if: always()
