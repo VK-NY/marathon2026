@@ -45,8 +45,7 @@ jobs:
           docker compose -p reportportal -f rp-compose.yml logs --tail=40 api uat
           exit 1
 
-      # The documented /api/users is /api/v1/users in this version; both are tried. Statuses go to annotations, as a
-      # failure here leaves nothing else to read.
+      # Statuses go to annotations, as a failure here leaves nothing else to read.
       - name: Create an API key
         run: |
           status=$(curl -sS -o token.json -w '%{http_code}' -u ui:uiman "$RP_URL/uat/sso/oauth/token" \
@@ -56,27 +55,14 @@ jobs:
           if [ -z "$token" ]; then echo "::error::Sign-in to ReportPortal answered $status"; exit 1; fi
           echo "::add-mask::$token"
 
-          for base in "$RP_URL/api/v1/users" "$RP_URL/api/users"; do
-            status=$(curl -sS -o me.json -w '%{http_code}' -H "Authorization: Bearer $token" "$base")
-            user_id=$(jq -r '.id // empty' me.json 2>/dev/null || true)
-            rm -f me.json
-            echo "::notice::$base answered $status"
-            if [ -z "$user_id" ]; then continue; fi
-
-            status=$(curl -sS -o key.json -w '%{http_code}' -X POST -H "Authorization: Bearer $token" \
-              -H "Content-Type: application/json" -d '{"name":"github-actions"}' "$base/$user_id/api-keys")
-            key=$(jq -r '.api_key // empty' key.json 2>/dev/null || true)
-            rm -f key.json
-            echo "::notice::$base/$user_id/api-keys answered $status"
-            if [ -n "$key" ]; then
-              echo "::add-mask::$key"
-              echo "RP_API_KEY=$key" >> "$GITHUB_ENV"
-              exit 0
-            fi
-          done
-
-          echo "::error::Could not create a ReportPortal API key"
-          exit 1
+          user_id=$(curl -fsS -H "Authorization: Bearer $token" "$RP_URL/api/users" | jq -r .id)
+          status=$(curl -sS -o key.json -w '%{http_code}' -X POST -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" -d '{"name":"github-actions"}' "$RP_URL/api/users/$user_id/api-keys")
+          key=$(jq -r '.api_key // empty' key.json)
+          rm -f key.json
+          if [ -z "$key" ]; then echo "::error::Creating the API key answered $status"; exit 1; fi
+          echo "::add-mask::$key"
+          echo "RP_API_KEY=$key" >> "$GITHUB_ENV"
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -118,6 +104,21 @@ jobs:
           jq -r '"## ReportPortal launch\n\n| Launch | Status | Total | Passed | Failed | Skipped |\n|---|---|---:|---:|---:|---:|",
             (.content[] | "| \(.name) #\(.number) | \(.status) | \(.statistics.executions.total // 0) | \(.statistics.executions.passed // 0) | \(.statistics.executions.failed // 0) | \(.statistics.executions.skipped // 0) |")' \
             report-portal/launches.json >> "$GITHUB_STEP_SUMMARY"
+
+          # A launch can be FAILED with every scenario passed: this names what failed.
+          launch_id=$(jq -r '.content[0].id' report-portal/launches.json)
+          curl -fsS -H "Authorization: Bearer $RP_API_KEY" \
+            "$RP_URL/api/v1/$RP_PROJECT/item?filter.eq.launchId=$launch_id&filter.eq.status=FAILED&isLatest=false&launchesLimit=0&page.size=20" \
+            -o report-portal/failed-items.json
+          jq -r '"::notice::failed items: \(.page.totalElements)", (.content[] | "::notice::\(.type) hasChildren=\(.hasChildren) \(.name)")' \
+            report-portal/failed-items.json
+          for item in $(jq -r '.content[:3][].id' report-portal/failed-items.json); do
+            curl -fsS -H "Authorization: Bearer $RP_API_KEY" \
+              "$RP_URL/api/v1/$RP_PROJECT/log?filter.eq.item=$item&page.size=5" \
+              | jq -r '.content[] | "::notice::log \(.level) \(.message[:150] | gsub("\n"; " "))"'
+          done
+          find aqa/restaurant-aqa-framework -name 'ReportPortal*.log' -exec grep -hiE 'error|exception' {} + \
+            | head -5 | cut -c1-200 | sed 's/^/::notice::agent /' || true
 
       - name: Take a screenshot of the launch
         if: always()
