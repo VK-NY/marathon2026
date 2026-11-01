@@ -30,13 +30,17 @@ jobs:
 
       - name: Wait for ReportPortal
         run: |
-          for attempt in $(seq 1 60); do
-            if curl -fs "$RP_URL/api/health" > /dev/null && curl -fs "$RP_URL/uat/health" > /dev/null; then
+          # Only a 200 counts: until a service is up, the gateway redirects its path to the UI with a 302.
+          for attempt in $(seq 1 90); do
+            api=$(curl -s -o /dev/null -w '%{http_code}' "$RP_URL/api/health")
+            uat=$(curl -s -o /dev/null -w '%{http_code}' "$RP_URL/uat/health")
+            if [ "$api" = 200 ] && [ "$uat" = 200 ]; then
               echo "ReportPortal is up after $attempt checks"
               exit 0
             fi
             sleep 10
           done
+          echo "::error::ReportPortal did not start: api $api, uat $uat"
           docker compose -p reportportal -f rp-compose.yml ps
           docker compose -p reportportal -f rp-compose.yml logs --tail=40 api uat
           exit 1
