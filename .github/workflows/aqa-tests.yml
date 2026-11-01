@@ -98,7 +98,7 @@ jobs:
             echo "$name: set"
           done
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -143,7 +143,7 @@ jobs:
 
       - name: Upload TUnit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tunit-report
           path: |
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload Reqnroll report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-report
           path: aqa/restaurant-aqa-framework/TestResults/reqnroll/
@@ -169,7 +169,7 @@ jobs:
       # all-green run.
       - name: Upload Playwright traces
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: aqa/restaurant-aqa-framework/TestResults/traces/*.zip

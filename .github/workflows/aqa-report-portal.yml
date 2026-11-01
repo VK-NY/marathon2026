@@ -64,7 +64,7 @@ jobs:
           echo "::add-mask::$key"
           echo "RP_API_KEY=$key" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload the evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-portal
           path: report-portal/
